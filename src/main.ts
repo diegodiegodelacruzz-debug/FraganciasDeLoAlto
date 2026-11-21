@@ -6,14 +6,14 @@ const app = document.querySelector<HTMLDivElement>('#app')!
 const PHONE = '5491158685179'
 const socials = {
   instagram: 'https://www.instagram.com/fragancias_de_lo_alto/',
-  facebook: 'https://www.facebook.com/search/top?q=fragancias%20de%20lo%20alto',
+  facebook: 'https://www.facebook.com/share/1Dz4Xs7AgN/',
   tiktok: 'https://www.tiktok.com/@fragancias_de_lo_alto_quimica'
 }
 
 type Cart = Record<number, number>
 let cart: Cart = {}
 try {
-  cart = JSON.parse(localStorage.getItem('fragancias-cart') || '{}')
+  cart = {}
 } catch {
   cart = {}
 }
@@ -33,6 +33,7 @@ function productCard(p: typeof products[number]) {
     <article class="product-card">
       <div class="product-photo">
         <img src="/images/${p.file}" alt="Artículo número ${p.id}" loading="lazy">
+        ${p.file.startsWith('desodorante-piso') ? '<span class="fragrance-tag">CONSULTAR FRAGANCIAS</span>' : ''}
         <span class="number-tag">ARTÍCULO NRO. ${p.id}</span>
         ${qty ? `<span class="selected-tag">${qty} en carrito</span>` : ''}
       </div>

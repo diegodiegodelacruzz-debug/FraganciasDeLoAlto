@@ -343,3 +343,19 @@ footer small { color: #93869f; font-size: 10px; }
   .brand-mini { font-size: 9px; }
   .product-photo { height: 135px; }
 }
+
+.fragrance-tag {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #352349;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  letter-spacing: .5px;
+  box-shadow: 0 3px 10px #0003;
+}
