@@ -13,7 +13,7 @@ const socials = {
 type Cart = Record<number, number>
 let cart: Cart = {}
 try {
-  cart = {}
+  cart = JSON.parse(localStorage.getItem('fragancias-cart') || '{}')
 } catch {
   cart = {}
 }
