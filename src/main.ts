@@ -1,4 +1,5 @@
 import './style.css'
+import { createClient } from "@supabase/supabase-js"
 import { products } from './products'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -330,3 +331,149 @@ function refreshCounters() {
 renderProducts()
 renderCart()
 refreshCounters()
+
+// RECUPERACIÓN DE CONTRASEÑA SUPABASE
+const recoveryClient = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+
+const RECOVERY_EMAIL = 'diegodiegodelacruzz@gmail.com'
+
+function showRecovery(mode: 'password' | 'expired' | 'success') {
+  let panel = document.querySelector<HTMLDivElement>('#supabase-recovery')
+
+  if (!panel) {
+    panel = document.createElement('div')
+    panel.id = 'supabase-recovery'
+    document.body.appendChild(panel)
+  }
+
+  panel.style.cssText = `
+    position:fixed;inset:0;z-index:99999;
+    background:rgba(10,12,20,.94);
+    display:flex;align-items:center;justify-content:center;
+    padding:20px;font-family:Arial,sans-serif;
+  `
+
+  panel.innerHTML = `
+    <div style="background:#fff;color:#222;width:100%;max-width:430px;
+      padding:30px;border-radius:18px;box-sizing:border-box">
+      <h2 style="margin-top:0;color:#171b2b">Fragancias De Lo Alto</h2>
+      <div id="recovery-content"></div>
+      <p id="recovery-status" style="font-size:14px;line-height:1.5"></p>
+    </div>
+  `
+
+  const content = panel.querySelector<HTMLDivElement>('#recovery-content')!
+  const status = panel.querySelector<HTMLParagraphElement>('#recovery-status')!
+
+  if (mode === 'expired') {
+    content.innerHTML = `
+      <h3>El enlace venció</h3>
+      <p>El enlace de recuperación ya no es válido. Podés solicitar uno nuevo.</p>
+      <button id="resend-recovery" style="width:100%;padding:14px;
+        background:#202b48;color:white;border:0;border-radius:8px">
+        ENVIAR NUEVO ENLACE
+      </button>
+    `
+
+    content.querySelector('#resend-recovery')?.addEventListener('click', async () => {
+      status.textContent = 'Enviando correo...'
+      const { error } = await recoveryClient.auth.resetPasswordForEmail(
+        RECOVERY_EMAIL,
+        { redirectTo: window.location.origin + '/' }
+      )
+      status.textContent = error
+        ? 'Error: ' + error.message
+        : 'Correo enviado. Abrí el enlace más reciente para continuar.'
+    })
+    return
+  }
+
+  if (mode === 'success') {
+    content.innerHTML = `
+      <h3>Contraseña actualizada</h3>
+      <p>Tu contraseña se guardó correctamente. Ya podés continuar.</p>
+      <button id="finish-recovery" style="width:100%;padding:14px;
+        background:#202b48;color:white;border:0;border-radius:8px">
+        VOLVER A LA TIENDA
+      </button>
+    `
+    content.querySelector('#finish-recovery')?.addEventListener('click', () => {
+      panel?.remove()
+      history.replaceState(null, '', window.location.pathname)
+    })
+    return
+  }
+
+  content.innerHTML = `
+    <h3>Crear nueva contraseña</h3>
+    <p>Ingresá tu nueva contraseña para acceder a la administración.</p>
+    <form id="recovery-form">
+      <label style="display:block;margin:14px 0 6px">Nueva contraseña</label>
+      <input id="new-password" type="password" minlength="8"
+        autocomplete="new-password" required
+        style="width:100%;padding:13px;box-sizing:border-box;border:1px solid #ccc;border-radius:8px">
+      <label style="display:block;margin:14px 0 6px">Repetir contraseña</label>
+      <input id="confirm-password" type="password" minlength="8"
+        autocomplete="new-password" required
+        style="width:100%;padding:13px;box-sizing:border-box;border:1px solid #ccc;border-radius:8px">
+      <button type="submit" style="width:100%;padding:14px;margin-top:18px;
+        background:#202b48;color:white;border:0;border-radius:8px">
+        GUARDAR CONTRASEÑA
+      </button>
+    </form>
+  `
+
+  content.querySelector<HTMLFormElement>('#recovery-form')!
+    .addEventListener('submit', async event => {
+      event.preventDefault()
+
+      const password = content.querySelector<HTMLInputElement>('#new-password')!.value
+      const confirm = content.querySelector<HTMLInputElement>('#confirm-password')!.value
+
+      if (password.length < 8) {
+        status.textContent = 'La contraseña debe tener al menos 8 caracteres.'
+        return
+      }
+
+      if (password !== confirm) {
+        status.textContent = 'Las contraseñas no coinciden.'
+        return
+      }
+
+      status.textContent = 'Guardando contraseña...'
+
+      const { error } = await recoveryClient.auth.updateUser({ password })
+
+      if (error) {
+        status.textContent = 'No se pudo actualizar: ' + error.message
+        return
+      }
+
+      showRecovery('success')
+    })
+}
+
+const recoveryParams = new URLSearchParams(window.location.hash.slice(1))
+const recoveryError = recoveryParams.get('error_code')
+const isRecoveryLink = recoveryParams.get('type') === 'recovery'
+
+if (recoveryError === 'otp_expired' || recoveryParams.get('error') === 'access_denied') {
+  showRecovery('expired')
+} else if (isRecoveryLink) {
+  recoveryClient.auth.getSession().then(({ data, error }) => {
+    if (data.session) {
+      showRecovery('password')
+    } else if (error) {
+      showRecovery('expired')
+    }
+  })
+}
+
+recoveryClient.auth.onAuthStateChange(event => {
+  if (event === 'PASSWORD_RECOVERY') {
+    showRecovery('password')
+  }
+})
