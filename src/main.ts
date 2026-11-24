@@ -1,6 +1,7 @@
 import './style.css'
-import { createClient } from "@supabase/supabase-js"
-import { products } from './products'
+import { initAdmin } from './admin'
+import { supabase } from './supabase'
+import { products, loadProducts, type Product } from './catalog'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
@@ -28,27 +29,27 @@ function saveCart() {
   localStorage.setItem('fragancias-cart', JSON.stringify(cart))
 }
 
-function productCard(p: typeof products[number]) {
-  const qty = cart[p.id] || 0
+function productCard(p: Product) {
+  const qty = cart[p.article_number] || 0
   return `
     <article class="product-card">
       <div class="product-photo">
-        <img src="/images/${p.file}" alt="Artículo número ${p.id}" loading="lazy">
-        ${p.file.startsWith('desodorante-piso') ? '<span class="fragrance-tag">CONSULTAR FRAGANCIAS</span>' : ''}
-        <span class="number-tag">ARTÍCULO NRO. ${p.id}</span>
+        <img src="${p.imageUrl}" alt="Artículo número ${p.article_number}" loading="lazy">
+        ${p.ask_fragrances ? '<span class="fragrance-tag">CONSULTAR FRAGANCIAS</span>' : ''}
+        <span class="number-tag">ARTÍCULO NRO. ${p.article_number}</span>
         ${qty ? `<span class="selected-tag">${qty} en carrito</span>` : ''}
       </div>
       <div class="product-info">
-        <span class="product-category">${p.category === 'limpieza' ? 'LIMPIEZA' : 'BAZAR'}</span>
-        <h3>Artículo NRO. ${p.id}</h3>
+        <span class="product-category">${p.categorySlug === 'limpieza' ? 'LIMPIEZA' : 'BAZAR'}</span>
+        <h3>Artículo NRO. ${p.article_number}</h3>
         <div class="product-actions">
-          <button class="add-button" data-add="${p.id}">
+          <button class="add-button" data-add="${p.article_number}">
             ${qty ? '＋ AGREGAR MÁS' : '＋ AGREGAR AL CARRITO'}
           </button>
           ${qty ? `<div class="quantity-control">
-            <button data-minus="${p.id}" aria-label="Quitar una unidad">−</button>
+            <button data-minus="${p.article_number}" aria-label="Quitar una unidad">−</button>
             <strong>${qty}</strong>
-            <button data-add="${p.id}" aria-label="Agregar una unidad">+</button>
+            <button data-add="${p.article_number}" aria-label="Agregar una unidad">+</button>
           </div>` : ''}
         </div>
       </div>
@@ -57,8 +58,8 @@ function productCard(p: typeof products[number]) {
 
 function renderProducts() {
   const filtered = products.filter(p => {
-    const categoryMatch = category === 'todos' || p.category === category
-    const searchMatch = `articulo ${p.id} ${p.file}`.toLowerCase().includes(search.toLowerCase())
+    const categoryMatch = category === 'todos' || p.categorySlug === category
+    const searchMatch = `articulo ${p.article_number} ${p.name}`.toLowerCase().includes(search.toLowerCase())
     return categoryMatch && searchMatch
   })
   const grid = document.querySelector('#product-grid')
@@ -78,18 +79,18 @@ function renderCart() {
   const total = document.querySelector('#cart-total')
   if (!list || !total) return
 
-  const selected = products.filter(p => (cart[p.id] || 0) > 0)
+  const selected = products.filter(p => (cart[p.article_number] || 0) > 0)
   list.innerHTML = selected.length ? selected.map(p => `
     <div class="cart-line">
-      <img src="/images/${p.file}" alt="">
+      <img src="${p.imageUrl}" alt="">
       <div class="cart-line-info">
-        <strong>Artículo NRO. ${p.id}</strong>
-        <small>${p.category === 'limpieza' ? 'Limpieza' : 'Bazar'}</small>
+        <strong>Artículo NRO. ${p.article_number}</strong>
+        <small>${p.categorySlug === 'limpieza' ? 'Limpieza' : 'Bazar'}</small>
       </div>
       <div class="quantity-control">
-        <button data-minus="${p.id}">−</button>
-        <strong>${cart[p.id]}</strong>
-        <button data-add="${p.id}">+</button>
+        <button data-minus="${p.article_number}">−</button>
+        <strong>${cart[p.article_number]}</strong>
+        <button data-add="${p.article_number}">+</button>
       </div>
     </div>`).join('') :
     '<div class="empty-cart">🛍️<br>Tu carrito está vacío.<br>¡Descubrí nuestros productos!</div>'
@@ -106,14 +107,14 @@ function updateCart(id: number, delta: number) {
 }
 
 function openWhatsApp() {
-  const selected = products.filter(p => cart[p.id] > 0)
+  const selected = products.filter(p => cart[p.article_number] > 0)
   if (!selected.length) {
     alert('Primero agregá artículos a tu carrito.')
     return
   }
 
   const lines = selected.map(p =>
-    `• ARTÍCULO NRO. ${p.id} — ${cart[p.id]} unidad(es)`
+    `• ARTÍCULO NRO. ${p.article_number} — ${cart[p.article_number]} unidad(es)`
   ).join('\n')
 
   const message =
@@ -247,6 +248,7 @@ app.innerHTML = `
       <a href="${socials.facebook}" target="_blank">Facebook</a>
       <a href="${socials.tiktok}" target="_blank">TikTok</a>
       <a href="https://wa.me/${PHONE}" target="_blank">WhatsApp</a>
+      <a href="#admin" class="admin-access">Administración</a>
     </div>
     <p class="address">📍 Cachi 801 · Pompeya · CABA</p>
     <small>© ${new Date().getFullYear()} Fragancias de lo Alto. Todos los derechos reservados.</small>
@@ -328,22 +330,24 @@ function refreshCounters() {
   if (header) header.textContent = value
 }
 
-renderProducts()
+const grid = document.querySelector('#product-grid')
+if (grid) grid.innerHTML = '<div class="empty-state">Cargando catálogo...</div>'
+
 renderCart()
 refreshCounters()
 
+loadProducts()
+  .then(() => {
+    renderProducts()
+    renderCart()
+    refreshCounters()
+  })
+  .catch(error => {
+    console.error('Error al cargar el catálogo:', error)
+    if (grid) grid.innerHTML = '<div class="empty-state">No se pudo cargar el catálogo. Intentá nuevamente.</div>'
+  })
+
 // RECUPERACIÓN DE CONTRASEÑA SUPABASE
-const recoveryClient = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY,
-  {
-    auth: {
-      detectSessionInUrl: false,
-      persistSession: true,
-      autoRefreshToken: true
-    }
-  }
-)
 
 const RECOVERY_EMAIL = 'diegodiegodelacruzz@gmail.com'
 
@@ -387,7 +391,7 @@ function showRecovery(mode: 'password' | 'expired' | 'success') {
 
     content.querySelector('#resend-recovery')?.addEventListener('click', async () => {
       status.textContent = 'Enviando correo...'
-      const { error } = await recoveryClient.auth.resetPasswordForEmail(
+      const { error } = await supabase.auth.resetPasswordForEmail(
         RECOVERY_EMAIL,
         { redirectTo: window.location.origin + '/' }
       )
@@ -452,7 +456,7 @@ function showRecovery(mode: 'password' | 'expired' | 'success') {
 
       status.textContent = 'Guardando contraseña...'
 
-      const { error } = await recoveryClient.auth.updateUser({ password })
+      const { error } = await supabase.auth.updateUser({ password })
 
       if (error) {
         status.textContent = 'No se pudo actualizar: ' + error.message
@@ -496,13 +500,13 @@ async function initializeRecovery() {
   let error = null;
 
   if (recoveryType === 'recovery' && accessToken && refreshToken) {
-    const result = await recoveryClient.auth.setSession({
+    const result = await supabase.auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken
     });
     error = result.error;
   } else if (code) {
-    const result = await recoveryClient.auth.exchangeCodeForSession(code);
+    const result = await supabase.auth.exchangeCodeForSession(code);
     error = result.error;
   } else {
     showRecovery('expired');
@@ -534,3 +538,23 @@ initializeRecovery().catch(error => {
   );
   if (status) status.textContent = 'Error inesperado: ' + String(error);
 });
+
+// ACCESO AL PANEL PRIVADO
+if (window.location.hash === '#admin') {
+  initAdmin(app).catch(error => {
+    console.error('Error al iniciar administración:', error)
+    app.textContent = 'No se pudo iniciar el panel administrativo.'
+  })
+}
+
+// ABRIR ADMINISTRACIÓN DESDE LA TIENDA
+window.addEventListener('hashchange', () => {
+  if (window.location.hash === '#admin') {
+    initAdmin(app).catch(error => {
+      console.error('Error al abrir administración:', error)
+      app.textContent = 'No se pudo abrir el panel administrativo.'
+    })
+  } else if (document.querySelector('#admin-panel')) {
+    window.location.reload()
+  }
+})
