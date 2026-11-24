@@ -481,38 +481,56 @@ async function initializeRecovery() {
   const refreshToken = params.get('refresh_token');
   const recoveryType = params.get('type');
 
+  const code = new URLSearchParams(window.location.search).get('code');
+
+  if (recoveryType !== 'recovery' && !code) return;
+
+  showRecovery('password');
+
+  const status = document.querySelector<HTMLParagraphElement>(
+    '#supabase-recovery #recovery-status'
+  );
+
+  if (status) status.textContent = 'Validando enlace de recuperación...';
+
+  let error = null;
+
   if (recoveryType === 'recovery' && accessToken && refreshToken) {
-    const { error } = await recoveryClient.auth.setSession({
+    const result = await recoveryClient.auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken
     });
-
-    if (error) {
-      showRecovery('expired');
-      return;
-    }
-
-    history.replaceState(null, '', window.location.pathname);
-    showRecovery('password');
+    error = result.error;
+  } else if (code) {
+    const result = await recoveryClient.auth.exchangeCodeForSession(code);
+    error = result.error;
+  } else {
+    showRecovery('expired');
     return;
   }
 
-  const code = new URLSearchParams(window.location.search).get('code');
-
-  if (code) {
-    const { error } = await recoveryClient.auth.exchangeCodeForSession(code);
-
-    if (error) {
-      showRecovery('expired');
-      return;
-    }
-
-    history.replaceState(null, '', window.location.pathname);
-    showRecovery('password');
+  if (error) {
+    showRecovery('expired');
+    const message = document.querySelector<HTMLParagraphElement>(
+      '#supabase-recovery #recovery-status'
+    );
+    if (message) message.textContent = 'No se pudo validar el enlace: ' + error.message;
+    return;
   }
+
+  history.replaceState(null, '', window.location.pathname);
+
+  const finalStatus = document.querySelector<HTMLParagraphElement>(
+    '#supabase-recovery #recovery-status'
+  );
+  if (finalStatus) finalStatus.textContent = '';
 }
 
 initializeRecovery().catch(error => {
   console.error('Error de recuperación:', error);
   showRecovery('expired');
+  const status = document.querySelector<HTMLParagraphElement>(
+    '#supabase-recovery #recovery-status'
+  );
+  if (status) status.textContent = 'Error inesperado: ' + String(error);
 });
