@@ -335,7 +335,14 @@ refreshCounters()
 // RECUPERACIÓN DE CONTRASEÑA SUPABASE
 const recoveryClient = createClient(
   import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  {
+    auth: {
+      detectSessionInUrl: false,
+      persistSession: true,
+      autoRefreshToken: true
+    }
+  }
 )
 
 const RECOVERY_EMAIL = 'diegodiegodelacruzz@gmail.com'
@@ -456,24 +463,56 @@ function showRecovery(mode: 'password' | 'expired' | 'success') {
     })
 }
 
-const recoveryParams = new URLSearchParams(window.location.hash.slice(1))
-const recoveryError = recoveryParams.get('error_code')
-const isRecoveryLink = recoveryParams.get('type') === 'recovery'
 
-if (recoveryError === 'otp_expired' || recoveryParams.get('error') === 'access_denied') {
-  showRecovery('expired')
-} else if (isRecoveryLink) {
-  recoveryClient.auth.getSession().then(({ data, error }) => {
-    if (data.session) {
-      showRecovery('password')
-    } else if (error) {
-      showRecovery('expired')
+async function initializeRecovery() {
+  const params = new URLSearchParams(
+    window.location.hash.replace(/^#/, '')
+  );
+
+  const errorCode = params.get('error_code');
+  const authError = params.get('error');
+
+  if (errorCode || authError) {
+    showRecovery('expired');
+    return;
+  }
+
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  const recoveryType = params.get('type');
+
+  if (recoveryType === 'recovery' && accessToken && refreshToken) {
+    const { error } = await recoveryClient.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken
+    });
+
+    if (error) {
+      showRecovery('expired');
+      return;
     }
-  })
+
+    history.replaceState(null, '', window.location.pathname);
+    showRecovery('password');
+    return;
+  }
+
+  const code = new URLSearchParams(window.location.search).get('code');
+
+  if (code) {
+    const { error } = await recoveryClient.auth.exchangeCodeForSession(code);
+
+    if (error) {
+      showRecovery('expired');
+      return;
+    }
+
+    history.replaceState(null, '', window.location.pathname);
+    showRecovery('password');
+  }
 }
 
-recoveryClient.auth.onAuthStateChange(event => {
-  if (event === 'PASSWORD_RECOVERY') {
-    showRecovery('password')
-  }
-})
+initializeRecovery().catch(error => {
+  console.error('Error de recuperación:', error);
+  showRecovery('expired');
+});
