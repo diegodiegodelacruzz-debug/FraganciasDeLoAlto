@@ -402,7 +402,7 @@ function showRecovery(mode: 'password' | 'expired' | 'success') {
         }
         status.textContent = 'Enviando correo...'
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin + '/'
+          redirectTo: 'https://fraganciasdeloalto.pages.dev/'
         })
         status.textContent = error
           ? 'No se pudo solicitar el envío. Revisá el correo e intentá nuevamente.'

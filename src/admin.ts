@@ -79,6 +79,7 @@ export async function initAdmin(root: HTMLElement) {
             <input id="ad-password" type="password" autocomplete="current-password" required></div>
           <button class="ad-btn" style="width:100%;margin-top:18px">INGRESAR</button>
         </form>
+        <button type="button" id="ad-forgot" class="ad-toplink" style="display:block;margin:16px auto;background:none;border:0;cursor:pointer">Olvidé mi contraseña</button>
         <p id="ad-status" class="ad-status">${esc(message)}</p>
         <a class="ad-toplink" href="/">Volver a la tienda</a>
       </div>`
@@ -96,8 +97,25 @@ export async function initAdmin(root: HTMLElement) {
       }
       await verifyRole(data.user.id)
     })
-  }
 
+    view.querySelector('#ad-forgot')!.addEventListener('click', async () => {
+      const email = view.querySelector<HTMLInputElement>('#ad-email')!.value.trim()
+      if (!email) {
+        status('Ingresá primero tu correo electrónico.')
+        view.querySelector<HTMLInputElement>('#ad-email')!.focus()
+        return
+      }
+      status('Solicitando recuperación...')
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://fraganciasdeloalto.pages.dev/'
+      })
+      if (error) {
+        status('No se pudo solicitar la recuperación: ' + error.message)
+        return
+      }
+      status('Si la cuenta existe, recibirás un correo con el enlace de recuperación.')
+    })
+  }
   async function verifyRole(userId: string) {
     const { data, error } = await supabase.from('user_roles')
       .select('role').eq('user_id', userId).maybeSingle()
