@@ -349,8 +349,6 @@ loadProducts()
 
 // RECUPERACIÓN DE CONTRASEÑA SUPABASE
 
-const RECOVERY_EMAIL = 'diegodiegodelacruzz@gmail.com'
-
 function showRecovery(mode: 'password' | 'expired' | 'success') {
   let panel = document.querySelector<HTMLDivElement>('#supabase-recovery')
 
@@ -381,24 +379,35 @@ function showRecovery(mode: 'password' | 'expired' | 'success') {
 
   if (mode === 'expired') {
     content.innerHTML = `
-      <h3>El enlace venció</h3>
-      <p>El enlace de recuperación ya no es válido. Podés solicitar uno nuevo.</p>
-      <button id="resend-recovery" style="width:100%;padding:14px;
-        background:#202b48;color:white;border:0;border-radius:8px">
-        ENVIAR NUEVO ENLACE
-      </button>
+      <h3>Solicitar nuevo enlace</h3>
+      <p>Ingresá el correo electrónico de tu cuenta para recibir un nuevo enlace de recuperación.</p>
+      <form id="resend-recovery-form">
+        <input id="recovery-email" type="email" required autocomplete="email"
+          placeholder="Tu correo electrónico"
+          style="width:100%;padding:13px;box-sizing:border-box;border:1px solid #ccc;border-radius:8px;margin:12px 0">
+        <button type="submit" style="width:100%;padding:14px;
+          background:#202b48;color:white;border:0;border-radius:8px">
+          ENVIAR NUEVO ENLACE
+        </button>
+      </form>
     `
 
-    content.querySelector('#resend-recovery')?.addEventListener('click', async () => {
-      status.textContent = 'Enviando correo...'
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        RECOVERY_EMAIL,
-        { redirectTo: window.location.origin + '/' }
-      )
-      status.textContent = error
-        ? 'Error: ' + error.message
-        : 'Correo enviado. Abrí el enlace más reciente para continuar.'
-    })
+    content.querySelector<HTMLFormElement>('#resend-recovery-form')!
+      .addEventListener('submit', async event => {
+        event.preventDefault()
+        const email = content.querySelector<HTMLInputElement>('#recovery-email')!.value.trim()
+        if (!email) {
+          status.textContent = 'Ingresá un correo electrónico válido.'
+          return
+        }
+        status.textContent = 'Enviando correo...'
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + '/'
+        })
+        status.textContent = error
+          ? 'No se pudo solicitar el envío. Revisá el correo e intentá nuevamente.'
+          : 'Si la cuenta existe, recibirás un correo con el enlace de recuperación.'
+      })
     return
   }
 
